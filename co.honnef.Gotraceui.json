@@ -1,0 +1,55 @@
+{
+	"app-id": "co.honnef.Gotraceui",
+	"runtime": "org.freedesktop.Platform",
+	"runtime-version": "22.08",
+	"sdk": "org.freedesktop.Sdk",
+	"sdk-extensions": [
+		"org.freedesktop.Sdk.Extension.golang"
+	],
+	"command": "gotraceui",
+	"finish-args": [
+		"--device=dri",
+		"--socket=wayland",
+		"--filesystem=host"
+	],
+	"build-options": {
+		"env": [
+			"GOBIN=/app/bin",
+			"GOROOT=/usr/lib/sdk/golang"
+		]
+	},
+	"modules": [
+		{
+			"name": "gotraceui",
+			"buildsystem": "simple",
+			"build-commands": [
+				"cd src && $GOROOT/bin/go build -trimpath -o ../gotraceui -tags nox11 -ldflags \"-X gioui.org/app.ID=$FLATPAK_ID\" ./cmd/gotraceui",
+				"install -Dm00755 gotraceui $FLATPAK_DEST/bin/gotraceui",
+				"install -Dm00644 $FLATPAK_ID.appdata.xml $FLATPAK_DEST/share/appdata/$FLATPAK_ID.appdata.xml",
+				"cd src/share && find . -type f -exec install -Dm00644 {} $FLATPAK_DEST/share/{} \\;",
+				"sed -i -e /^Icon/s/gotraceui/$FLATPAK_ID/ $FLATPAK_DEST/share/applications/$FLATPAK_ID.desktop",
+				"find $FLATPAK_DEST/share -name 1024x1024 -type d -exec rm -rf {} +",
+				"find $FLATPAK_DEST/share -name gotraceui.png -execdir mv {} $FLATPAK_ID.png \\;",
+				"find $FLATPAK_DEST/share -name gotraceui.svg -execdir mv {} $FLATPAK_ID.svg \\;",
+				"find $FLATPAK_DEST/share -name x-gotraceui.xml -execdir mv {} $FLATPAK_ID.xml \\;"
+			],
+			"sources": [
+				{
+					"type": "git",
+					"tag": "v0.1.0",
+					"url": "https://github.com/dominikh/gotraceui.git",
+					"dest": "src"
+				},
+				{
+					"type": "dir",
+					"path": "./vendor",
+					"dest": "src/vendor"
+				},
+				{
+					"type": "file",
+					"path": "co.honnef.Gotraceui.appdata.xml"
+				}
+			]
+		}
+	]
+}
