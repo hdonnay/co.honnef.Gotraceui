@@ -4,11 +4,11 @@ package text
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
 
+	giofont "gioui.org/font"
 	"gioui.org/io/system"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -16,10 +16,31 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+// WrapPolicy configures strategies for choosing where to break lines of text for line
+// wrapping.
+type WrapPolicy uint8
+
+const (
+	// WrapHeuristically tries to minimize breaking within words (UAX#14 text segments)
+	// while also ensuring that text fits within the given MaxWidth. It will only break
+	// a line within a word (on a UAX#29 grapheme cluster boundary) when that word cannot
+	// fit on a line by itself. Additionally, when the final word of a line is being
+	// truncated, this policy will preserve as many symbols of that word as
+	// possible before the truncator.
+	WrapHeuristically WrapPolicy = iota
+	// WrapWords does not permit words (UAX#14 text segments) to be broken across lines.
+	// This means that sometimes long words will exceed the MaxWidth they are wrapped with.
+	WrapWords
+	// WrapGraphemes will maximize the amount of text on each line at the expense of readability,
+	// breaking any word across lines on UAX#29 grapheme cluster boundaries to maximize the number of
+	// grapheme clusters on each line.
+	WrapGraphemes
+)
+
 // Parameters are static text shaping attributes applied to the entire shaped text.
 type Parameters struct {
 	// Font describes the preferred typeface.
-	Font Font
+	Font giofont.Font
 	// Alignment characterizes the positioning of text within the line. It does not directly
 	// impact shaping, but is provided in order to allow efficient offset computation.
 	Alignment Alignment
@@ -27,13 +48,27 @@ type Parameters struct {
 	PxPerEm fixed.Int26_6
 	// MaxLines limits the quantity of shaped lines. Zero means no limit.
 	MaxLines int
+	// Truncator is a string of text to insert where the shaped text was truncated, which
+	// can currently ohly happen if MaxLines is nonzero and the text on the final line is
+	// truncated.
+	Truncator string
+
+	// WrapPolicy configures how line breaks will be chosen when wrapping text across lines.
+	WrapPolicy WrapPolicy
+
+	// MinWidth and MaxWidth provide the minimum and maximum horizontal space constraints
+	// for the shaped text.
+	MinWidth, MaxWidth int
+	// Locale provides primary direction and language information for the shaped text.
+	Locale system.Locale
+
+	// forceTruncate controls whether the truncator string is inserted on the final line of
+	// text with a MaxLines. It is unexported because this behavior only makes sense for the
+	// shaper to control when it iterates paragraphs of text.
+	forceTruncate bool
 }
 
-// A FontFace is a Font and a matching Face.
-type FontFace struct {
-	Font Font
-	Face Face
-}
+type FontFace = giofont.FontFace
 
 // Glyph describes a shaped font glyph. Many fields are distances relative
 // to the "dot", which is a point on the baseline (the line upon which glyphs
@@ -76,7 +111,7 @@ type Glyph struct {
 	// belongs to. If Flags does not contain FlagClusterBreak, this value will
 	// always be zero. The final glyph in the cluster contains the runes count
 	// for the entire cluster.
-	Runes byte
+	Runes int
 	// Flags encode special properties of this glyph.
 	Flags Flags
 }
@@ -105,6 +140,11 @@ const (
 	FlagParagraphBreak
 	// FlagParagraphStart indicates that the glyph starts a new paragraph.
 	FlagParagraphStart
+	// FlagTruncator indicates that the glyph is part of a special truncator run that
+	// represents the portion of text removed due to truncation. A glyph with both
+	// FlagTruncator and FlagClusterBreak will have a Runes field accounting for all
+	// runes truncated.
+	FlagTruncator
 )
 
 func (f Flags) String() string {
@@ -139,6 +179,11 @@ func (f Flags) String() string {
 	} else {
 		b.WriteString("_")
 	}
+	if f&FlagTruncator != 0 {
+		b.WriteString("…")
+	} else {
+		b.WriteString("_")
+	}
 	return b.String()
 }
 
@@ -146,12 +191,13 @@ type GlyphID uint64
 
 // Shaper converts strings of text into glyphs that can be displayed.
 type Shaper struct {
-	shaper      shaperImpl
-	pathCache   pathCache
-	layoutCache layoutCache
-	paragraph   []rune
+	shaper           shaperImpl
+	pathCache        pathCache
+	bitmapShapeCache bitmapShapeCache
+	layoutCache      layoutCache
 
-	reader strings.Reader
+	reader    *bufio.Reader
+	paragraph []byte
 
 	// Iterator state.
 	brokeParagraph   bool
@@ -174,18 +220,20 @@ func NewShaper(collection []FontFace) *Shaper {
 	for _, f := range collection {
 		l.shaper.Load(f)
 	}
+	l.shaper.shaper.SetFontCacheSize(32)
+	l.reader = bufio.NewReader(nil)
 	return l
 }
 
 // Layout text from an io.Reader according to a set of options. Results can be retrieved by
 // iteratively calling NextGlyph.
-func (l *Shaper) Layout(params Parameters, minWidth, maxWidth int, lc system.Locale, txt io.Reader) {
-	l.layoutText(params, minWidth, maxWidth, lc, bufio.NewReader(txt), "")
+func (l *Shaper) Layout(params Parameters, txt io.Reader) {
+	l.layoutText(params, txt, "")
 }
 
 // LayoutString is Layout for strings.
-func (l *Shaper) LayoutString(params Parameters, minWidth, maxWidth int, lc system.Locale, str string) {
-	l.layoutText(params, minWidth, maxWidth, lc, nil, str)
+func (l *Shaper) LayoutString(params Parameters, str string) {
+	l.layoutText(params, nil, str)
 }
 
 func (l *Shaper) reset(align Alignment) {
@@ -198,83 +246,109 @@ func (l *Shaper) reset(align Alignment) {
 // layoutText lays out a large text document by breaking it into paragraphs and laying
 // out each of them separately. This allows the shaping results to be cached independently
 // by paragraph. Only one of txt and str should be provided.
-func (l *Shaper) layoutText(params Parameters, minWidth, maxWidth int, lc system.Locale, txt io.RuneReader, str string) {
+func (l *Shaper) layoutText(params Parameters, txt io.Reader, str string) {
 	l.reset(params.Alignment)
 	if txt == nil && len(str) == 0 {
-		l.txt.append(l.layoutParagraph(params, minWidth, maxWidth, lc, "", nil))
+		l.txt.append(l.layoutParagraph(params, "", nil))
 		return
 	}
+	l.reader.Reset(txt)
 	truncating := params.MaxLines > 0
-	maxLines := params.MaxLines
 	var done bool
-	var startByte int
 	var endByte int
 	for !done {
-		var runes int
 		l.paragraph = l.paragraph[:0]
 		if txt != nil {
-			for r, _, re := txt.ReadRune(); !done; r, _, re = txt.ReadRune() {
-				if re != nil {
+			for {
+				b, err := l.reader.ReadByte()
+				if err != nil {
+					// EOF or any other error ends processing here.
 					done = true
-					continue
-				}
-				l.paragraph = append(l.paragraph, r)
-				runes++
-				if r == '\n' {
 					break
 				}
+				l.paragraph = append(l.paragraph, b)
+				if b == '\n' {
+					break
+				}
+			}
+			if !done {
+				_, re := l.reader.ReadByte()
+				done = re != nil
+				_ = l.reader.UnreadByte()
 			}
 		} else {
-			for endByte = startByte; endByte < len(str); {
-				r, width := utf8.DecodeRuneInString(str[endByte:])
-				endByte += width
-				runes++
-				if r == '\n' {
-					break
-				}
+			idx := strings.IndexByte(str, '\n')
+			if idx == -1 {
+				done = true
+				endByte = len(str)
+			} else {
+				endByte = idx + 1
 			}
-			done = endByte == len(str)
 		}
-		if startByte != endByte || (len(l.paragraph) > 0 || len(l.txt.lines) == 0) {
-			l.txt.append(l.layoutParagraph(params, minWidth, maxWidth, lc, str[startByte:endByte], l.paragraph))
+		if len(str[:endByte]) > 0 || (len(l.paragraph) > 0 || len(l.txt.lines) == 0) {
+			params.forceTruncate = truncating && !done
+			lines := l.layoutParagraph(params, str[:endByte], l.paragraph)
 			if truncating {
-				params.MaxLines = maxLines - len(l.txt.lines)
+				params.MaxLines -= len(lines.lines)
 				if params.MaxLines == 0 {
 					done = true
+					// We've truncated the text, but we need to account for all of the runes we never
+					// decoded in the truncator.
+					var unreadRunes int
+					if txt == nil {
+						unreadRunes = utf8.RuneCountInString(str[endByte:])
+					} else {
+						for {
+							_, _, e := l.reader.ReadRune()
+							if e != nil {
+								break
+							}
+							unreadRunes++
+						}
+					}
+					lastLineIdx := len(lines.lines) - 1
+					lastRunIdx := len(lines.lines[lastLineIdx].runs) - 1
+					lastGlyphIdx := len(lines.lines[lastLineIdx].runs[lastRunIdx].Glyphs) - 1
+					lines.lines[lastLineIdx].runs[lastRunIdx].Runes.Count += unreadRunes
+					lines.lines[lastLineIdx].runs[lastRunIdx].Glyphs[lastGlyphIdx].runeCount += unreadRunes
 				}
 			}
+			l.txt.append(lines)
 		}
 		if done {
 			return
 		}
-		startByte = endByte
+		str = str[endByte:]
 	}
 }
 
-func (l *Shaper) layoutParagraph(params Parameters, minWidth, maxWidth int, lc system.Locale, asStr string, asRunes []rune) document {
+// layoutParagraph shapes and wraps a paragraph using the provided parameters.
+// It accepts the paragraph data in either string or rune format, preferring the
+// string in order to hit the shaper cache more quickly.
+func (l *Shaper) layoutParagraph(params Parameters, asStr string, asBytes []byte) document {
 	if l == nil {
 		return document{}
 	}
-	if len(asStr) == 0 && len(asRunes) > 0 {
-		asStr = string(asRunes)
+	if len(asStr) == 0 && len(asBytes) > 0 {
+		asStr = string(asBytes)
 	}
 	// Alignment is not part of the cache key because changing it does not impact shaping.
 	lk := layoutKey{
-		ppem:     params.PxPerEm,
-		maxWidth: maxWidth,
-		minWidth: minWidth,
-		maxLines: params.MaxLines,
-		str:      asStr,
-		locale:   lc,
-		font:     params.Font,
+		ppem:          params.PxPerEm,
+		maxWidth:      params.MaxWidth,
+		minWidth:      params.MinWidth,
+		maxLines:      params.MaxLines,
+		truncator:     params.Truncator,
+		locale:        params.Locale,
+		font:          params.Font,
+		forceTruncate: params.forceTruncate,
+		wrapPolicy:    params.WrapPolicy,
+		str:           asStr,
 	}
 	if l, ok := l.layoutCache.Get(lk); ok {
 		return l
 	}
-	if len(asRunes) == 0 && len(asStr) > 0 {
-		asRunes = []rune(asStr)
-	}
-	lines := l.shaper.LayoutRunes(params, minWidth, maxWidth, lc, asRunes)
+	lines := l.shaper.LayoutRunes(params, []rune(asStr))
 	l.layoutCache.Put(lk, lines)
 	return lines
 }
@@ -348,12 +422,15 @@ func (l *Shaper) NextGlyph() (_ Glyph, ok bool) {
 			Ascent:  line.ascent,
 			Descent: line.descent,
 			Advance: g.xAdvance,
-			Runes:   byte(g.runeCount),
+			Runes:   g.runeCount,
 			Offset: fixed.Point26_6{
 				X: g.xOffset,
 				Y: g.yOffset,
 			},
 			Bounds: g.bounds,
+		}
+		if run.truncator {
+			glyph.Flags |= FlagTruncator
 		}
 		l.glyph++
 		if !rtl {
@@ -374,6 +451,10 @@ func (l *Shaper) NextGlyph() (_ Glyph, ok bool) {
 			nextGlyph = len(run.Glyphs) - 1 - nextGlyph
 		}
 		endOfCluster := endOfRun || run.Glyphs[nextGlyph].clusterIndex != g.clusterIndex
+		if run.truncator {
+			// Only emit a single cluster for the entire truncator sequence.
+			endOfCluster = endOfRun
+		}
 		if endOfCluster {
 			glyph.Flags |= FlagClusterBreak
 		} else {
@@ -403,7 +484,6 @@ func (l *Shaper) NextGlyph() (_ Glyph, ok bool) {
 				l.pararagraphStart.Y = glyph.Y + int32((glyph.Ascent + glyph.Descent).Ceil())
 			}
 		}
-
 		return glyph, true
 	}
 }
@@ -417,7 +497,6 @@ const (
 // newGlyphID encodes a face and a glyph id into a GlyphID.
 func newGlyphID(ppem fixed.Int26_6, faceIdx int, gid font.GID) GlyphID {
 	if gid&^((1<<gidbits)-1) != 0 {
-		fmt.Println(gid)
 		panic("glyph id out of bounds")
 	}
 	if faceIdx&^((1<<facebits)-1) != 0 {
@@ -434,23 +513,39 @@ func newGlyphID(ppem fixed.Int26_6, faceIdx int, gid font.GID) GlyphID {
 
 // splitGlyphID is the opposite of newGlyphID.
 func splitGlyphID(g GlyphID) (fixed.Int26_6, int, font.GID) {
-	faceIdx := int(g) >> (gidbits + sizebits)
+	faceIdx := int(uint64(g) >> (gidbits + sizebits))
 	ppem := fixed.Int26_6((g & ((1<<sizebits - 1) << gidbits)) >> gidbits)
 	gid := font.GID(g) & (1<<gidbits - 1)
 	return ppem, faceIdx, gid
 }
 
-// Shape converts a slice of glyphs into a path describing their collective
-// shape. All glyphs are expected to be from a single line of text (their
-// Y offsets are ignored).
+// Shape converts the provided glyphs into a path. The path will enclose the forms
+// of all vector glyphs.
+// All glyphs are expected to be from a single line of text (their Y offsets are ignored).
 func (l *Shaper) Shape(gs []Glyph) clip.PathSpec {
 	key := l.pathCache.hashGlyphs(gs)
 	shape, ok := l.pathCache.Get(key, gs)
 	if ok {
 		return shape
 	}
-	ops := new(op.Ops)
-	shape = l.shaper.Shape(ops, gs)
+	pathOps := new(op.Ops)
+	shape = l.shaper.Shape(pathOps, gs)
 	l.pathCache.Put(key, gs, shape)
 	return shape
+}
+
+// Bitmaps extracts bitmap glyphs from the provided slice and creates an op.CallOp to present
+// them. The returned op.CallOp will align correctly with the return value of Shape() for the
+// same gs slice.
+// All glyphs are expected to be from a single line of text (their Y offsets are ignored).
+func (l *Shaper) Bitmaps(gs []Glyph) op.CallOp {
+	key := l.bitmapShapeCache.hashGlyphs(gs)
+	call, ok := l.bitmapShapeCache.Get(key, gs)
+	if ok {
+		return call
+	}
+	callOps := new(op.Ops)
+	call = l.shaper.Bitmaps(callOps, gs)
+	l.bitmapShapeCache.Put(key, gs, call)
+	return call
 }

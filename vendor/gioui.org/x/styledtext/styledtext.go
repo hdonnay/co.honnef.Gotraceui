@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"unicode/utf8"
 
+	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/paint"
@@ -16,7 +17,7 @@ import (
 
 // SpanStyle describes the appearance of a span of styled text.
 type SpanStyle struct {
-	Font    text.Font
+	Font    font.Font
 	Size    unit.Sp
 	Color   color.NRGBA
 	Content string
@@ -92,10 +93,13 @@ func (t TextStyle) Layout(gtx layout.Context, spanFn func(gtx layout.Context, id
 		macro := op.Record(gtx.Ops)
 		paint.ColorOp{Color: span.Color}.Add(gtx.Ops)
 		t.Shaper.LayoutString(text.Parameters{
-			Font:     span.Font,
-			PxPerEm:  fixed.I(gtx.Sp(span.Size)),
-			MaxLines: 1,
-		}, 0, maxWidth, gtx.Locale, span.Content)
+			Font:      span.Font,
+			PxPerEm:   fixed.I(gtx.Sp(span.Size)),
+			MaxLines:  1,
+			MaxWidth:  maxWidth,
+			Truncator: "​", // Unicode zero-width space.
+			Locale:    gtx.Locale,
+		}, span.Content)
 		ti := textIterator{
 			viewport: image.Rectangle{Max: gtx.Constraints.Max},
 			maxLines: 1,

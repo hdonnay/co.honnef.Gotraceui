@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>co.honnef.Gotraceui</id>
+	<name>Gotraceui</name>
+	<developer_name>Gotraceui developers</developer_name>
+	<summary>Go execution trace frontend</summary>
+	<metadata_license>MIT</metadata_license>
+	<project_license>MIT</project_license>
+	<recommends>
+		<control>pointing</control>
+		<control>keyboard</control>
+	</recommends>
+	<description>
+		<p>
+			Gotraceui is a tool for visualizing and analyzing Go execution traces.
+			It is meant to be a faster, more accessible, and more powerful alternative to <pre>go tool trace</pre>.
+			Unlike <pre>go tool trace</pre>, Gotraceui doesn’t use deprecated browser APIs (or a browser at all), and its UI is tuned specifically to the unique characteristics of Go traces.
+		</p>
+	</description>
+	<launchable type="desktop-id">co.honnef.Gotraceui.desktop</launchable>
+	<screenshots>
+		<screenshot type="default">
+			<image>https://user-images.githubusercontent.com/39825/228830850-d0f324dd-10bc-47e9-99d4-0936cbb79492.png</image>
+		</screenshot>
+	</screenshots>
+
+	<url type="homepage">https://github.com/dominikh/gotraceui/</url>
+	<url type="help">https://github.com/dominikh/gotraceui/releases/download/v0.3.0/gotraceui.pdf</url>
+
+	<content_rating type="oars-1.1" />
+	<releases>
+		<release version="0.3.0" date="2023-08-07" type="stable">
+			<description>
+				<ul>
+					<li>Added support for traces produced by Go 1.21</li>
+					<li>Improved the formatting of durations in statistics</li>
+					<li>Made minor improvements to visual appearance</li>
+					<li>Replaced foldables with a tabbed interface</li>
+					<li>Allow selecting and copying stack traces</li>
+					<li>Added list of spans to goroutine panel</li>
+					<li>Added parent goroutine to goroutine panel</li>
+					<li>Added statistics to spans panel</li>
+					<li>Added individual spans' stack traces in spans panel</li>
+					<li>Added function panel</li>
+					<li>Navigating to timestamps now places them at the configured axis origin</li>
+					<li>Fixed ctrl+scroll zooming on Windows</li>
+					<li>Fixed a crash when loading traces that start in the middle of a task</li>
+					<li>Truncate long span labels instead of hiding them</li>
+					<li>Added a button to select all instances of a user region</li>
+					<li>Added histograms</li>
+					<li>Stop-the-world spans now display the reason for the STW</li>
+					<li>Made various performance improvements</li>
+					<li>Drastically lowered memory usage for traces with a lot of deep call stacks</li>
+					<li>Holding shift while scrolling vertically will cause horizontal scrolling, and vice versa</li>
+					<li>The info panel of user regions now displays events that occurred on the goroutine during said regions</li>
+					<li>Improved accuracy of computation of durations of merged spans</li>
+					<li>Added more features to the context menu of span links</li>
+					<li>Expensive computations, such as creating goroutine statistics, now run in the background and no longer prevent the UI from updating.</li>
+				</ul>
+			</description>
+			<url type="details">https://github.com/dominikh/gotraceui/releases/tag/v0.1.0</url>
+		</release>
+		<release version="0.1.0" date="2023-03-30" type="stable">
+			<description>
+				<p>
+					This is the first release of Gotraceui, the efficient frontend for Go execution traces.
+					It is the culmination of nine months of work and over 700 commits.
+				</p>
+				<p>
+					The attached PDF is a manual explaining most aspects of Gotraceui, including how to install it.
+				</p>
+				<p>
+					All of the essential features are there and Gotraceui should be a better alternative to <pre>go tool trace</pre> in 90% of cases.
+					Nevertheless, this is only the beginning.
+				</p>
+			</description>
+			<url type="details">https://github.com/dominikh/gotraceui/releases/tag/v0.1.0</url>
+		</release>
+	</releases>
+    <categories>
+        <category>Developer</category>
+    </categories>
+</component>

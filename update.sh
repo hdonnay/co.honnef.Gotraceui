@@ -1,9 +1,12 @@
 #!/bin/sh
 set -ex
-test -d src || git clone "$(jq -r '.modules[0].sources[0].url' co.honnef.Gotraceui.json)" src
+root="$(realpath "$(dirname "$0")")"
+d="$(mktemp -d)"
+trap 'rm -rf "$d"' EXIT
 (
-	cd src
-	git fetch origin
-	git checkout "$(jq -r '.modules[0].sources[0].tag' ../co.honnef.Gotraceui.json)"
-	go mod vendor -o ../vendor
+	cd "$d"
+	curl -sfSLo src.zip "$(jq -r '.modules[0].sources[0].url' "${root}/co.honnef.Gotraceui.json")"
+	unzip -q src.zip
+	cd honnef.co/go/gotraceui@v*
+	go mod vendor -o "${root}/vendor"
 )

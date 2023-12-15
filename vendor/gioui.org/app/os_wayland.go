@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"image"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -904,18 +903,7 @@ func gio_onPointerButton(data unsafe.Pointer, p *C.struct_wl_pointer, serial, t,
 	default:
 		return
 	}
-	var typ pointer.Type
-	switch state {
-	case 0:
-		w.pointerBtns &^= btn
-		typ = pointer.Release
-		// Move or resize gestures no longer applies.
-		w.inCompositor = false
-	case 1:
-		w.pointerBtns |= btn
-		typ = pointer.Press
-	}
-	if typ == pointer.Press && btn == pointer.ButtonPrimary {
+	if state == 1 && btn == pointer.ButtonPrimary {
 		if _, edge := w.systemGesture(); edge != 0 {
 			w.resize(serial, edge)
 			return
@@ -928,6 +916,17 @@ func gio_onPointerButton(data unsafe.Pointer, p *C.struct_wl_pointer, serial, t,
 				return
 			}
 		}
+	}
+	var typ pointer.Type
+	switch state {
+	case 0:
+		w.pointerBtns &^= btn
+		typ = pointer.Release
+		// Move or resize gestures no longer applies.
+		w.inCompositor = false
+	case 1:
+		w.pointerBtns |= btn
+		typ = pointer.Press
 	}
 	w.flushScroll()
 	w.resetFling()
@@ -954,7 +953,12 @@ func gio_onPointerAxis(data unsafe.Pointer, p *C.struct_wl_pointer, t, axis C.ui
 	case C.WL_POINTER_AXIS_HORIZONTAL_SCROLL:
 		w.scroll.dist.X += v
 	case C.WL_POINTER_AXIS_VERTICAL_SCROLL:
-		w.scroll.dist.Y += v
+		// horizontal scroll if shift + mousewheel(up/down) pressed.
+		if w.disp.xkb.Modifiers() == key.ModShift {
+			w.scroll.dist.X += v
+		} else {
+			w.scroll.dist.Y += v
+		}
 	}
 }
 
@@ -1004,7 +1008,12 @@ func gio_onPointerAxisDiscrete(data unsafe.Pointer, p *C.struct_wl_pointer, axis
 	case C.WL_POINTER_AXIS_HORIZONTAL_SCROLL:
 		w.scroll.steps.X += int(discrete)
 	case C.WL_POINTER_AXIS_VERTICAL_SCROLL:
-		w.scroll.steps.Y += int(discrete)
+		// horizontal scroll if shift + mousewheel(up/down) pressed.
+		if w.disp.xkb.Modifiers() == key.ModShift {
+			w.scroll.steps.X += int(discrete)
+		} else {
+			w.scroll.steps.Y += int(discrete)
+		}
 	}
 }
 
@@ -1018,7 +1027,7 @@ func (w *window) ReadClipboard() {
 	// Don't let slow clipboard transfers block event loop.
 	go func() {
 		defer r.Close()
-		data, _ := ioutil.ReadAll(r)
+		data, _ := io.ReadAll(r)
 		w.clipReads <- clipboard.Event{Text: string(data)}
 		w.Wakeup()
 	}()

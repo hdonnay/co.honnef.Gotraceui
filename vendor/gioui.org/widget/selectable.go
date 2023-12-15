@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"gioui.org/font"
 	"gioui.org/gesture"
 	"gioui.org/io/clipboard"
 	"gioui.org/io/event"
@@ -12,6 +13,7 @@ import (
 	"gioui.org/io/pointer"
 	"gioui.org/io/system"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/text"
 	"gioui.org/unit"
@@ -45,11 +47,19 @@ func (s stringSource) ReadAt(b []byte, offset int64) (int, error) {
 
 // ReplaceRunes is unimplemented, as a stringSource is immutable.
 func (s stringSource) ReplaceRunes(byteOffset, runeCount int64, str string) {
-	return
 }
 
-// Selectable holds text selection state.
+// Selectable displays selectable text.
 type Selectable struct {
+	// Alignment controls the alignment of the text.
+	Alignment text.Alignment
+	// MaxLines is the maximum number of lines of text to be displayed.
+	MaxLines int
+	// Truncator is the symbol to use at the end of the final line of text
+	// if text was cut off. Defaults to "…" if left empty.
+	Truncator string
+	// WrapPolicy configures how displayed text will be broken into lines.
+	WrapPolicy  text.WrapPolicy
 	initialized bool
 	source      stringSource
 	// scratch is a buffer reused to efficiently read text out of the
@@ -92,18 +102,19 @@ func (l *Selectable) Focused() bool {
 	return l.focused
 }
 
-// PaintSelection paints the contrasting background for selected text.
-func (l *Selectable) PaintSelection(gtx layout.Context) {
+// paintSelection paints the contrasting background for selected text.
+func (l *Selectable) paintSelection(gtx layout.Context, material op.CallOp) {
 	l.initialize()
 	if !l.focused {
 		return
 	}
-	l.text.PaintSelection(gtx)
+	l.text.PaintSelection(gtx, material)
 }
 
-func (l *Selectable) PaintText(gtx layout.Context) {
+// paintText paints the text glyphs with the provided material.
+func (l *Selectable) paintText(gtx layout.Context, material op.CallOp) {
 	l.initialize()
-	l.text.PaintText(gtx)
+	l.text.PaintText(gtx, material)
 }
 
 // SelectionLen returns the length of the selection, in runes; it is
@@ -159,11 +170,21 @@ func (l *Selectable) SetText(s string) {
 	}
 }
 
-// Layout clips to the dimensions of the selectable, updates the shaped text, configures input handling, and invokes
-// content. content is expected to set colors and invoke the Paint methods. content may be nil, in which case nothing
-// will be displayed.
-func (l *Selectable) Layout(gtx layout.Context, lt *text.Shaper, font text.Font, size unit.Sp, content layout.Widget) layout.Dimensions {
+// Truncated returns whether the text has been truncated by the text shaper to
+// fit within available constraints.
+func (l *Selectable) Truncated() bool {
+	return l.text.Truncated()
+}
+
+// Layout clips to the dimensions of the selectable, updates the shaped text, configures input handling, and paints
+// the text and selection rectangles. The provided textMaterial and selectionMaterial ops are used to set the
+// paint material for the text and selection rectangles, respectively.
+func (l *Selectable) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectionMaterial op.CallOp) layout.Dimensions {
 	l.initialize()
+	l.text.Alignment = l.Alignment
+	l.text.MaxLines = l.MaxLines
+	l.text.Truncator = l.Truncator
+	l.text.WrapPolicy = l.WrapPolicy
 	l.text.Update(gtx, lt, font, size, l.handleEvents)
 	dims := l.text.Dimensions()
 	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops).Pop()
@@ -183,9 +204,8 @@ func (l *Selectable) Layout(gtx layout.Context, lt *text.Shaper, font text.Font,
 	l.clicker.Add(gtx.Ops)
 	l.dragger.Add(gtx.Ops)
 
-	if content != nil {
-		content(gtx)
-	}
+	l.paintSelection(gtx, selectionMaterial)
+	l.paintText(gtx, textMaterial)
 	return dims
 }
 
@@ -297,6 +317,20 @@ func (e *Selectable) command(gtx layout.Context, k key.Event) {
 	if k.Modifiers.Contain(key.ModShift) {
 		selAct = selectionExtend
 	}
+	if k.Modifiers == key.ModShortcut {
+		switch k.Name {
+		// Copy or Cut selection -- ignored if nothing selected.
+		case "C", "X":
+			e.scratch = e.text.SelectedText(e.scratch)
+			if text := string(e.scratch); text != "" {
+				clipboard.WriteOp{Text: text}.Add(gtx.Ops)
+			}
+		// Select all
+		case "A":
+			e.text.SetCaret(0, e.text.Len())
+		}
+		return
+	}
 	switch k.Name {
 	case key.NameUpArrow:
 		e.text.MoveLines(-1, selAct)
@@ -328,15 +362,6 @@ func (e *Selectable) command(gtx layout.Context, k key.Event) {
 		e.text.MoveStart(selAct)
 	case key.NameEnd:
 		e.text.MoveEnd(selAct)
-	// Copy or Cut selection -- ignored if nothing selected.
-	case "C", "X":
-		e.scratch = e.text.SelectedText(e.scratch)
-		if text := string(e.scratch); text != "" {
-			clipboard.WriteOp{Text: text}.Add(gtx.Ops)
-		}
-	// Select all
-	case "A":
-		e.text.SetCaret(0, e.text.Len())
 	}
 }
 

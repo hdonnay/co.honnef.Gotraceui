@@ -1,10 +1,11 @@
-# gioui.org v0.0.0-20230224004350-5f818bc5e7f9
+# gioui.org v0.0.0-20230611141527-3bb6cca15710
 ## explicit; go 1.18
 gioui.org/app
 gioui.org/app/internal/log
 gioui.org/app/internal/windows
 gioui.org/app/internal/xkb
 gioui.org/f32
+gioui.org/font
 gioui.org/font/gofont
 gioui.org/font/opentype
 gioui.org/gesture
@@ -51,7 +52,7 @@ gioui.org/cpu
 gioui.org/shader
 gioui.org/shader/gio
 gioui.org/shader/piet
-# gioui.org/x v0.0.0-20230227132240-6822f59b3b6b
+# gioui.org/x v0.0.0-20230609201311-f4f65e94fa90
 ## explicit; go 1.18
 gioui.org/x/component
 gioui.org/x/eventx
@@ -61,26 +62,22 @@ gioui.org/x/styledtext
 # git.wow.st/gmp/jni v0.0.0-20210610011705-34026c7e22d0
 ## explicit; go 1.14
 git.wow.st/gmp/jni
-# github.com/benoitkugler/textlayout v0.3.0
+# github.com/go-text/typesetting v0.0.0-20230602202114-9797aefac433
 ## explicit; go 1.17
-github.com/benoitkugler/textlayout/fonts
-github.com/benoitkugler/textlayout/fonts/binaryreader
-github.com/benoitkugler/textlayout/fonts/glyphsnames
-github.com/benoitkugler/textlayout/fonts/psinterpreter
-github.com/benoitkugler/textlayout/fonts/simpleencodings
-github.com/benoitkugler/textlayout/fonts/truetype
-github.com/benoitkugler/textlayout/fonts/type1C
-github.com/benoitkugler/textlayout/graphite
-github.com/benoitkugler/textlayout/harfbuzz
-github.com/benoitkugler/textlayout/language
-github.com/benoitkugler/textlayout/unicodedata
-# github.com/go-text/typesetting v0.0.0-20221214153724-0399769901d5
-## explicit; go 1.15
 github.com/go-text/typesetting/di
 github.com/go-text/typesetting/font
+github.com/go-text/typesetting/harfbuzz
 github.com/go-text/typesetting/language
+github.com/go-text/typesetting/opentype/api
+github.com/go-text/typesetting/opentype/api/font
+github.com/go-text/typesetting/opentype/api/font/cff
+github.com/go-text/typesetting/opentype/api/font/cff/interpreter
+github.com/go-text/typesetting/opentype/api/metadata
+github.com/go-text/typesetting/opentype/loader
+github.com/go-text/typesetting/opentype/tables
 github.com/go-text/typesetting/segmenter
 github.com/go-text/typesetting/shaping
+github.com/go-text/typesetting/unicodedata
 # github.com/godbus/dbus/v5 v5.0.6
 ## explicit; go 1.12
 github.com/godbus/dbus/v5
@@ -93,7 +90,7 @@ golang.org/x/exp/slices
 golang.org/x/exp/shiny/iconvg
 golang.org/x/exp/shiny/iconvg/internal/gradient
 golang.org/x/exp/shiny/materialdesign/icons
-# golang.org/x/image v0.0.0-20220722155232-062f8c9fd539
+# golang.org/x/image v0.7.0
 ## explicit; go 1.12
 golang.org/x/image/ccitt
 golang.org/x/image/draw
@@ -115,18 +112,13 @@ golang.org/x/image/math/fixed
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
 golang.org/x/image/vector
-# golang.org/x/sys v0.0.0-20220825204002-c680a09ffe64
+# golang.org/x/sys v0.7.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.7.0
+# golang.org/x/text v0.9.0
 ## explicit; go 1.17
-golang.org/x/text/encoding
-golang.org/x/text/encoding/charmap
-golang.org/x/text/encoding/internal
-golang.org/x/text/encoding/internal/identifier
-golang.org/x/text/encoding/unicode
 golang.org/x/text/feature/plural
 golang.org/x/text/internal
 golang.org/x/text/internal/catmsg
@@ -136,7 +128,6 @@ golang.org/x/text/internal/language/compact
 golang.org/x/text/internal/number
 golang.org/x/text/internal/stringset
 golang.org/x/text/internal/tag
-golang.org/x/text/internal/utf8internal
 golang.org/x/text/language
 golang.org/x/text/message
 golang.org/x/text/message/catalog

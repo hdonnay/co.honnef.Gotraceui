@@ -25,8 +25,6 @@ type TextField struct {
 	// click detects when the mouse pointer clicks or hovers
 	// within the textfield.
 	click gesture.Click
-	// Alignment specifies where to anchor the text.
-	Alignment layout.Alignment
 
 	// Helper text to give additional context to a field.
 	Helper string
@@ -189,9 +187,13 @@ func (in *TextField) Update(gtx C, th *material.Theme, hint string) {
 	// Hack: Reset min constraint to 0 to avoid min == max.
 	gtx.Constraints.Min.X = 0
 	macro := op.Record(gtx.Ops)
+	var spacing unit.Dp
+	if len(hint) > 0 {
+		spacing = 4
+	}
 	in.label.Smallest = layout.Inset{
-		Left:  unit.Dp(4),
-		Right: unit.Dp(4),
+		Left:  spacing,
+		Right: spacing,
 	}.Layout(gtx, func(gtx C) D {
 		return material.Label(th, textSmall, hint).Layout(gtx)
 	})
@@ -289,16 +291,6 @@ func (in *TextField) Layout(gtx C, th *material.Theme, hint string) D {
 							return layout.Flex{
 								Axis:      layout.Horizontal,
 								Alignment: layout.Middle,
-								Spacing: func() layout.Spacing {
-									switch in.Alignment {
-									case layout.Middle:
-										return layout.SpaceSides
-									case layout.End:
-										return layout.SpaceStart
-									default: // layout.Start and all others
-										return layout.SpaceEnd
-									}
-								}(),
 							}.Layout(
 								gtx,
 								layout.Rigid(func(gtx C) D {
@@ -307,7 +299,7 @@ func (in *TextField) Layout(gtx C, th *material.Theme, hint string) D {
 									}
 									return D{}
 								}),
-								layout.Rigid(func(gtx C) D {
+								layout.Flexed(1, func(gtx C) D {
 									return material.Editor(th, &in.Editor, "").Layout(gtx)
 								}),
 								layout.Rigid(func(gtx C) D {

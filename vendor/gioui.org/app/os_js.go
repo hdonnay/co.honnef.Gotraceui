@@ -22,7 +22,9 @@ import (
 	"gioui.org/unit"
 )
 
-type ViewEvent struct{}
+type ViewEvent struct {
+	Element js.Value
+}
 
 type contextStatus int
 
@@ -111,6 +113,7 @@ func newWindow(win *callbacks, options []Option) error {
 		w.w.SetDriver(w)
 		w.Configure(options)
 		w.blur()
+		w.w.Event(ViewEvent{Element: cont})
 		w.w.Event(system.StageEvent{Stage: system.StageRunning})
 		w.resize()
 		w.draw(true)
@@ -233,6 +236,10 @@ func (w *window) addEventListeners() {
 	w.addEventListener(w.cnv, "wheel", func(this js.Value, args []js.Value) interface{} {
 		e := args[0]
 		dx, dy := e.Get("deltaX").Float(), e.Get("deltaY").Float()
+		// horizontal scroll if shift is pressed.
+		if e.Get("shiftKey").Bool() {
+			dx, dy = dy, dx
+		}
 		mode := e.Get("deltaMode").Int()
 		switch mode {
 		case 0x01: // DOM_DELTA_LINE
