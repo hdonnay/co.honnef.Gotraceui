@@ -27,6 +27,7 @@
 				"install -Dm00755 gotraceui $FLATPAK_DEST/bin/gotraceui",
 				"install -Dm00644 $FLATPAK_ID.metainfo.xml $FLATPAK_DEST/share/appdata/$FLATPAK_ID.metainfo.xml",
 				"install -Dm00644 gotraceui.pdf $FLATPAK_DEST/share/doc/$FLATPAK_ID/gotraceui.pdf",
+				"install -Dm00644 src/LICENSE* $FLATPAK_DEST/share/doc/$FLATPAK_ID/",
 				"cd release/share && find . -type f -exec install -Dm00644 {} $FLATPAK_DEST/share/{} \\;",
 				"sed -i -e /^Icon/s/gotraceui/$FLATPAK_ID/ $FLATPAK_DEST/share/applications/$FLATPAK_ID.desktop",
 				"find $FLATPAK_DEST/share -name 1024x1024 -type d -exec rm -rf {} +",
@@ -37,24 +38,24 @@
 			"sources": [
 				{
 					"type": "archive",
-					"url": "https://proxy.golang.org/honnef.co/go/gotraceui/@v/v0.3.0.zip",
-					"sha256": "7cbcebaf2496a12464ec74c20c684aab33f57b0fc3ab03b5109ed7a9bc52b841",
+					"url": "https://proxy.golang.org/honnef.co/go/gotraceui/@v/v0.4.0.zip",
+					"sha256": "42bebe5fc147ab9d989f01445ace2a0967fd706489a71efc540e0b83f3366d89",
 					"archive-type": "zip",
 					"strip-components": 3,
 					"dest": "src"
 				},
 				{
 					"type": "archive",
-					"url": "https://github.com/dominikh/gotraceui/archive/refs/tags/v0.3.0.zip",
-					"sha256": "246408ff286dabe262f1c357d5f7e231ff78d359a28a0eb383f672aa7fabf541",
+					"url": "https://github.com/dominikh/gotraceui/archive/refs/tags/v0.4.0.zip",
+					"sha256": "bcb14b5c342aae0dd1b5b807a1dacac980bf298f529022f96a4e62fcc5b55dbe",
 					"archive-type": "zip",
 					"strip-components": 1,
 					"dest": "release"
 				},
 				{
 					"type": "file",
-					"url": "https://github.com/dominikh/gotraceui/releases/download/v0.3.0/gotraceui.pdf",
-					"sha256": "4dd1b623df4e5b7f0c855867ffdcd792a0163272f41749cae22388022baf6ab4"
+					"url": "https://github.com/dominikh/gotraceui/releases/download/v0.4.0/gotraceui.pdf",
+					"sha256": "01b9cc4c92f863b67aa77f752bc3413f1823888d3416eb0f646c0b6ab7e25633"
 				},
 				{
 					"type": "dir",

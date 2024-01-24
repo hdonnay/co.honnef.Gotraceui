@@ -35,6 +35,12 @@ type Editor struct {
 	text textView
 	// Alignment controls the alignment of text within the editor.
 	Alignment text.Alignment
+	// LineHeight determines the gap between baselines of text. If zero, a sensible
+	// default will be used.
+	LineHeight unit.Sp
+	// LineHeightScale is multiplied by LineHeight to determine the final gap
+	// between baselines. If zero, a sensible default will be used.
+	LineHeightScale float32
 	// SingleLine force the text to stay on a single line.
 	// SingleLine also sets the scrolling direction to
 	// horizontal.
@@ -219,7 +225,7 @@ func (e *Editor) processPointer(gtx layout.Context) {
 		axis = gesture.Vertical
 		smin, smax = sbounds.Min.Y, sbounds.Max.Y
 	}
-	sdist := e.scroller.Scroll(gtx.Metric, gtx, gtx.Now, axis)
+	sdist := e.scroller.Update(gtx.Metric, gtx, gtx.Now, axis)
 	var soff int
 	if e.SingleLine {
 		e.text.ScrollRel(sdist, 0)
@@ -232,8 +238,8 @@ func (e *Editor) processPointer(gtx layout.Context) {
 		switch evt := evt.(type) {
 		case gesture.ClickEvent:
 			switch {
-			case evt.Type == gesture.TypePress && evt.Source == pointer.Mouse,
-				evt.Type == gesture.TypeClick && evt.Source != pointer.Mouse:
+			case evt.Kind == gesture.KindPress && evt.Source == pointer.Mouse,
+				evt.Kind == gesture.KindClick && evt.Source != pointer.Mouse:
 				prevCaretPos, _ := e.text.Selection()
 				e.blinkStart = gtx.Now
 				e.text.MoveCoord(image.Point{
@@ -272,10 +278,10 @@ func (e *Editor) processPointer(gtx layout.Context) {
 		case pointer.Event:
 			release := false
 			switch {
-			case evt.Type == pointer.Release && evt.Source == pointer.Mouse:
+			case evt.Kind == pointer.Release && evt.Source == pointer.Mouse:
 				release = true
 				fallthrough
-			case evt.Type == pointer.Drag && evt.Source == pointer.Mouse:
+			case evt.Kind == pointer.Drag && evt.Source == pointer.Mouse:
 				if e.dragging {
 					e.blinkStart = gtx.Now
 					e.text.MoveCoord(image.Point{
@@ -299,10 +305,10 @@ func (e *Editor) processPointer(gtx layout.Context) {
 
 func (e *Editor) clickDragEvents(gtx layout.Context) []event.Event {
 	var combinedEvents []event.Event
-	for _, evt := range e.clicker.Events(gtx) {
+	for _, evt := range e.clicker.Update(gtx) {
 		combinedEvents = append(combinedEvents, evt)
 	}
-	for _, evt := range e.dragger.Events(gtx.Metric, gtx, gesture.Both) {
+	for _, evt := range e.dragger.Update(gtx.Metric, gtx, gesture.Both) {
 		combinedEvents = append(combinedEvents, evt)
 	}
 	return combinedEvents
@@ -504,20 +510,17 @@ func (e *Editor) initBuffer() {
 		e.text.SetSource(e.buffer)
 	}
 	e.text.Alignment = e.Alignment
+	e.text.LineHeight = e.LineHeight
+	e.text.LineHeightScale = e.LineHeightScale
 	e.text.SingleLine = e.SingleLine
 	e.text.Mask = e.Mask
 	e.text.WrapPolicy = e.WrapPolicy
 }
 
-// Layout lays out the editor using the provided textMaterial as the paint material
-// for the text glyphs+caret and the selectMaterial as the paint material for the
-// selection rectangle.
-func (e *Editor) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
+// Update the state of the editor in response to input events.
+func (e *Editor) Update(gtx layout.Context) {
 	e.initBuffer()
-	e.text.Update(gtx, lt, font, size, e.processEvents)
-
-	dims := e.layout(gtx, textMaterial, selectMaterial)
-
+	e.processEvents(gtx)
 	if e.focused {
 		// Notify IME of selection if it changed.
 		newSel := e.ime.selection
@@ -543,8 +546,16 @@ func (e *Editor) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, siz
 
 		e.updateSnippet(gtx, e.ime.start, e.ime.end)
 	}
+}
 
-	return dims
+// Layout lays out the editor using the provided textMaterial as the paint material
+// for the text glyphs+caret and the selectMaterial as the paint material for the
+// selection rectangle.
+func (e *Editor) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
+	e.Update(gtx)
+
+	e.text.Layout(gtx, lt, font, size)
+	return e.layout(gtx, textMaterial, selectMaterial)
 }
 
 // updateSnippet adds a key.SnippetOp if the snippet content or position

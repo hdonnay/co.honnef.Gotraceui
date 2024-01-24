@@ -338,20 +338,6 @@ func (w *window) NewContext() (context, error) {
 func dataDir() (string, error) {
 	dataDirOnce.Do(func() {
 		dataPath = <-dataDirChan
-		// Set XDG_CACHE_HOME to make os.UserCacheDir work.
-		if _, exists := os.LookupEnv("XDG_CACHE_HOME"); !exists {
-			cachePath := filepath.Join(dataPath, "cache")
-			os.Setenv("XDG_CACHE_HOME", cachePath)
-		}
-		// Set XDG_CONFIG_HOME to make os.UserConfigDir work.
-		if _, exists := os.LookupEnv("XDG_CONFIG_HOME"); !exists {
-			cfgPath := filepath.Join(dataPath, "config")
-			os.Setenv("XDG_CONFIG_HOME", cfgPath)
-		}
-		// Set HOME to make os.UserHomeDir work.
-		if _, exists := os.LookupEnv("HOME"); !exists {
-			os.Setenv("HOME", dataPath)
-		}
 	})
 	return dataPath, nil
 }
@@ -389,6 +375,22 @@ func Java_org_gioui_Gio_runGoMain(env *C.JNIEnv, class C.jclass, jdataDir C.jbyt
 	}
 	n := C.jni_GetArrayLength(env, jdataDir)
 	dataDir := C.GoStringN((*C.char)(unsafe.Pointer(dirBytes)), n)
+
+	// Set XDG_CACHE_HOME to make os.UserCacheDir work.
+	if _, exists := os.LookupEnv("XDG_CACHE_HOME"); !exists {
+		cachePath := filepath.Join(dataDir, "cache")
+		os.Setenv("XDG_CACHE_HOME", cachePath)
+	}
+	// Set XDG_CONFIG_HOME to make os.UserConfigDir work.
+	if _, exists := os.LookupEnv("XDG_CONFIG_HOME"); !exists {
+		cfgPath := filepath.Join(dataDir, "config")
+		os.Setenv("XDG_CONFIG_HOME", cfgPath)
+	}
+	// Set HOME to make os.UserHomeDir work.
+	if _, exists := os.LookupEnv("HOME"); !exists {
+		os.Setenv("HOME", dataDir)
+	}
+
 	dataDirChan <- dataDir
 	C.jni_ReleaseByteArrayElements(env, jdataDir, dirBytes)
 
@@ -951,18 +953,18 @@ func Java_org_gioui_GioView_onKeyEvent(env *C.JNIEnv, class C.jclass, handle C.j
 //export Java_org_gioui_GioView_onTouchEvent
 func Java_org_gioui_GioView_onTouchEvent(env *C.JNIEnv, class C.jclass, handle C.jlong, action, pointerID, tool C.jint, x, y, scrollX, scrollY C.jfloat, jbtns C.jint, t C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
-	var typ pointer.Type
+	var kind pointer.Kind
 	switch action {
 	case C.AMOTION_EVENT_ACTION_DOWN, C.AMOTION_EVENT_ACTION_POINTER_DOWN:
-		typ = pointer.Press
+		kind = pointer.Press
 	case C.AMOTION_EVENT_ACTION_UP, C.AMOTION_EVENT_ACTION_POINTER_UP:
-		typ = pointer.Release
+		kind = pointer.Release
 	case C.AMOTION_EVENT_ACTION_CANCEL:
-		typ = pointer.Cancel
+		kind = pointer.Cancel
 	case C.AMOTION_EVENT_ACTION_MOVE:
-		typ = pointer.Move
+		kind = pointer.Move
 	case C.AMOTION_EVENT_ACTION_SCROLL:
-		typ = pointer.Scroll
+		kind = pointer.Scroll
 	default:
 		return
 	}
@@ -992,7 +994,7 @@ func Java_org_gioui_GioView_onTouchEvent(env *C.JNIEnv, class C.jclass, handle C
 		return
 	}
 	w.callbacks.Event(pointer.Event{
-		Type:      typ,
+		Kind:      kind,
 		Source:    src,
 		Buttons:   btns,
 		PointerID: pointer.ID(pointerID),
@@ -1150,6 +1152,7 @@ func (w *window) SetInputHint(mode key.InputHint) {
 		TYPE_CLASS_TEXT                   = 1
 		TYPE_TEXT_VARIATION_EMAIL_ADDRESS = 32
 		TYPE_TEXT_VARIATION_URI           = 16
+		TYPE_TEXT_VARIATION_PASSWORD      = 128
 		TYPE_TEXT_FLAG_CAP_SENTENCES      = 16384
 		TYPE_TEXT_FLAG_AUTO_CORRECT       = 32768
 
@@ -1173,6 +1176,8 @@ func (w *window) SetInputHint(mode key.InputHint) {
 			m = TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_URI
 		case key.HintTelephone:
 			m = TYPE_CLASS_PHONE
+		case key.HintPassword:
+			m = TYPE_CLASS_TEXT | TYPE_TEXT_VARIATION_PASSWORD
 		default:
 			m = TYPE_CLASS_TEXT
 		}

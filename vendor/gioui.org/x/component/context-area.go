@@ -31,7 +31,11 @@ type ContextArea struct {
 	// is zero, it will default to pointer.ButtonSecondary.
 	Activation pointer.Buttons
 	// AbsolutePosition will position the contextual widget in the
-	// same place no matter where the activating interaction occurred.
+	// relative to the position of the context area instead of relative
+	// to the position of the click event that triggered the activation.
+	// This is useful for controls (like button-activated menus) where
+	// the contextual content should not be precisely attached to the
+	// click position, but should instead be attached to the button.
 	AbsolutePosition bool
 	// PositionHint tells the ContextArea the closest edge/corner of the
 	// window to where it is being used in the layout. This helps it to
@@ -75,7 +79,7 @@ func (r *ContextArea) Update(gtx C) {
 				}
 			}
 		}
-		if e.Buttons.Contain(r.Activation) && e.Type == pointer.Press {
+		if e.Buttons.Contain(r.Activation) && e.Kind == pointer.Press {
 			r.active = true
 			r.justActivated = true
 			if !r.AbsolutePosition {
@@ -90,7 +94,7 @@ func (r *ContextArea) Update(gtx C) {
 		if !ok {
 			continue
 		}
-		if e.Type == pointer.Press {
+		if e.Kind == pointer.Press {
 			r.Dismiss()
 		}
 	}
@@ -100,7 +104,7 @@ func (r *ContextArea) Update(gtx C) {
 		if !ok {
 			continue
 		}
-		if e.Type == pointer.Release {
+		if e.Kind == pointer.Release {
 			r.Dismiss()
 		}
 	}
@@ -127,11 +131,11 @@ func (r *ContextArea) Layout(gtx C, w layout.Widget) D {
 	}
 
 	if r.active {
-		if int(r.position.X)+r.dims.Size.X > gtx.Constraints.Max.X {
+		if int(r.position.X)+r.dims.Size.X > dims.Size.X {
 			if newX := int(r.position.X) - r.dims.Size.X; newX < 0 {
 				switch r.PositionHint {
 				case layout.E, layout.NE, layout.SE:
-					r.position.X = float32(gtx.Constraints.Max.X - r.dims.Size.X)
+					r.position.X = float32(dims.Size.X - r.dims.Size.X)
 				case layout.W, layout.NW, layout.SW:
 					r.position.X = 0
 				}
@@ -139,11 +143,11 @@ func (r *ContextArea) Layout(gtx C, w layout.Widget) D {
 				r.position.X = float32(newX)
 			}
 		}
-		if int(r.position.Y)+r.dims.Size.Y > gtx.Constraints.Max.Y {
+		if int(r.position.Y)+r.dims.Size.Y > dims.Size.Y {
 			if newY := int(r.position.Y) - r.dims.Size.Y; newY < 0 {
 				switch r.PositionHint {
 				case layout.S, layout.SE, layout.SW:
-					r.position.Y = float32(gtx.Constraints.Max.Y - r.dims.Size.Y)
+					r.position.Y = float32(dims.Size.Y - r.dims.Size.Y)
 				case layout.N, layout.NE, layout.NW:
 					r.position.Y = 0
 				}
@@ -160,7 +164,7 @@ func (r *ContextArea) Layout(gtx C, w layout.Widget) D {
 			pointer.InputOp{
 				Tag:   suppressionTag,
 				Grab:  false,
-				Types: pointer.Press,
+				Kinds: pointer.Press,
 			}.Add(gtx.Ops)
 			stack.Pop()
 			return macro2.Stop()
@@ -183,7 +187,7 @@ func (r *ContextArea) Layout(gtx C, w layout.Widget) D {
 		pointer.InputOp{
 			Tag:   dismissTag,
 			Grab:  false,
-			Types: pointer.Release,
+			Kinds: pointer.Release,
 		}.Add(gtx.Ops)
 
 		stack.Pop()
@@ -198,7 +202,7 @@ func (r *ContextArea) Layout(gtx C, w layout.Widget) D {
 	pointer.InputOp{
 		Tag:   r,
 		Grab:  false,
-		Types: pointer.Press | pointer.Release,
+		Kinds: pointer.Press | pointer.Release,
 	}.Add(gtx.Ops)
 
 	return dims

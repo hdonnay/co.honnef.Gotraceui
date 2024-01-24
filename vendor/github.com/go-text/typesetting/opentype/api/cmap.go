@@ -36,7 +36,11 @@ func (c cmapID) key() uint32 { return uint32(c.platform)<<16 | uint32(c.encoding
 // ProcessCmap sanitize the given 'cmap' subtable, and select the best encoding
 // when several subtables are given.
 // When present, the variation selectors are returned.
-func ProcessCmap(cmap tables.Cmap) (Cmap, UnicodeVariations, error) {
+// [os2FontPage] is used for legacy arabic fonts.
+//
+// The returned values are copied from the input 'cmap', meaning they do not
+// retain any reference on the input storage.
+func ProcessCmap(cmap tables.Cmap, os2FontPage tables.FontPage) (Cmap, UnicodeVariations, error) {
 	var (
 		candidateIds []cmapID
 		candidates   []Cmap
@@ -84,7 +88,16 @@ func ProcessCmap(cmap tables.Cmap) (Cmap, UnicodeVariations, error) {
 
 	// Prefer symbol if available.
 	if index := findSubtable(cmapID{tables.PlatformMicrosoft, tables.PEMicrosoftSymbolCs}, candidateIds); index != -1 {
-		return candidates[index], uv, nil
+		cm := candidates[index]
+		switch os2FontPage {
+		case tables.FPNone:
+			cm = remaperSymbol{cm}
+		case tables.FPSimpArabic:
+			cm = remaperPUASimp{cm}
+		case tables.FPTradArabic:
+			cm = remaperPUATrad{cm}
+		}
+		return cm, uv, nil
 	}
 
 	/* 32-bit subtables. */
@@ -540,3 +553,125 @@ func (t UnicodeVariations) GetGlyphVariant(r, selector rune) (GID, uint8) {
 	}
 	return 0, VariantNotFound
 }
+
+// Handle legacy font with remap
+// TODO: the Iter() and RuneRanges() method does not include the additional mapping
+
+type remaperSymbol struct {
+	Cmap
+}
+
+func (rs remaperSymbol) Lookup(r rune) (GID, bool) {
+	// try without map first
+	if g, ok := rs.Cmap.Lookup(r); ok {
+		return g, true
+	}
+
+	if r <= 0x00FF {
+		/* For symbol-encoded OpenType fonts, we duplicate the
+		 * U+F000..F0FF range at U+0000..U+00FF.  That's what
+		 * Windows seems to do, and that's hinted about at:
+		 * https://docs.microsoft.com/en-us/typography/opentype/spec/recom
+		 * under "Non-Standard (Symbol) Fonts". */
+		mapped := 0xF000 + r
+		return rs.Lookup(mapped)
+	}
+
+	return 0, false
+}
+
+type remaperPUASimp struct {
+	Cmap
+}
+
+func (rs remaperPUASimp) Lookup(r rune) (GID, bool) {
+	// try without map first
+	if g, ok := rs.Cmap.Lookup(r); ok {
+		return g, true
+	}
+
+	if mapped := arabicPUASimpMap(r); mapped != 0 {
+		return rs.Lookup(mapped)
+	}
+
+	return 0, false
+}
+
+type remaperPUATrad struct {
+	Cmap
+}
+
+func (rs remaperPUATrad) Lookup(r rune) (GID, bool) {
+	// try without map first
+	if g, ok := rs.Cmap.Lookup(r); ok {
+		return g, true
+	}
+
+	if mapped := arabicPUATradMap(r); mapped != 0 {
+		return rs.Lookup(mapped)
+	}
+
+	return 0, false
+}
+
+// ---------------------------- efficent rune set support -----------------------------------------
+
+// CmapRuneRanger is implemented by cmaps whose coverage is defined in terms
+// of rune ranges
+type CmapRuneRanger interface {
+	// RuneRanges returns a list of (start, end) rune pairs, both included.
+	// `dst` is an optional buffer used to reduce allocations
+	RuneRanges(dst [][2]rune) [][2]rune
+}
+
+var (
+	_ CmapRuneRanger = cmap4(nil)
+	_ CmapRuneRanger = (*cmap6or10)(nil)
+	_ CmapRuneRanger = cmap12(nil)
+	_ CmapRuneRanger = cmap13(nil)
+)
+
+func (cm cmap4) RuneRanges(dst [][2]rune) [][2]rune {
+	if cap(dst) < len(cm) {
+		dst = make([][2]rune, 0, len(cm))
+	}
+	dst = dst[:0]
+	for _, e := range cm {
+		start, end := rune(e.start), rune(e.end)
+		if L := len(dst); L != 0 && dst[L-1][1] == start {
+			// grow the previous range
+			dst[L-1][1] = end
+		} else {
+			dst = append(dst, [2]rune{start, end})
+		}
+	}
+	return dst
+}
+
+func (cm *cmap6or10) RuneRanges(dst [][2]rune) [][2]rune {
+	if cap(dst) < 1 {
+		dst = [][2]rune{{}}
+	}
+	dst = dst[:1]
+	dst[0] = [2]rune{cm.firstCode, cm.firstCode + rune(len(cm.entries)) - 1}
+	return dst
+}
+
+func (cm cmap12) RuneRanges(dst [][2]rune) [][2]rune {
+	if cap(dst) < len(cm) {
+		dst = make([][2]rune, 0, len(cm))
+	}
+	dst = dst[:0]
+	for _, e := range cm {
+		start, end := rune(e.StartCharCode), rune(e.EndCharCode)
+		if L := len(dst); L != 0 && dst[L-1][1] == start {
+			// grow the previous range
+			dst[L-1][1] = end
+		} else {
+			dst = append(dst, [2]rune{start, end})
+		}
+	}
+	return dst
+}
+
+func (cm cmap13) RuneRanges(dst [][2]rune) [][2]rune { return cmap12(cm).RuneRanges(dst) }

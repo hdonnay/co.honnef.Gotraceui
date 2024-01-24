@@ -44,6 +44,12 @@ type textSource interface {
 // be scrolled, and for configuring and drawing text selection boxes.
 type textView struct {
 	Alignment text.Alignment
+	// LineHeight controls the distance between the baselines of lines of text.
+	// If zero, a sensible default will be used.
+	LineHeight unit.Sp
+	// LineHeightScale applies a scaling factor to the LineHeight. If zero, a
+	// sensible default will be used.
+	LineHeightScale float32
 	// SingleLine forces the text to stay on a single line.
 	// SingleLine also sets the scrolling direction to
 	// horizontal.
@@ -222,10 +228,8 @@ func (e *textView) calculateViewSize(gtx layout.Context) image.Point {
 	return gtx.Constraints.Constrain(base)
 }
 
-// Update the text, reshaping it as necessary. If not nil, eventHandling will be invoked after reshaping the text to
-// allow parent widgets to adapt to any changes in text content or positioning. If eventHandling modifies the contents
-// of the textView, it is guaranteed to be reshaped (and ready for painting) before Update returns.
-func (e *textView) Update(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, eventHandling func(gtx layout.Context)) {
+// Layout the text, reshaping it as necessary.
+func (e *textView) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp) {
 	if e.params.Locale != gtx.Locale {
 		e.params.Locale = gtx.Locale
 		e.invalidate()
@@ -273,12 +277,16 @@ func (e *textView) Update(gtx layout.Context, lt *text.Shaper, font font.Font, s
 		e.params.WrapPolicy = e.WrapPolicy
 		e.invalidate()
 	}
+	if lh := fixed.I(gtx.Sp(e.LineHeight)); lh != e.params.LineHeight {
+		e.params.LineHeight = lh
+		e.invalidate()
+	}
+	if e.LineHeightScale != e.params.LineHeightScale {
+		e.params.LineHeightScale = e.LineHeightScale
+		e.invalidate()
+	}
 
 	e.makeValid()
-	if eventHandling != nil {
-		eventHandling(gtx)
-		e.makeValid()
-	}
 
 	if viewSize := e.calculateViewSize(gtx); viewSize != e.viewSize {
 		e.viewSize = viewSize
@@ -478,14 +486,19 @@ func (e *textView) layoutText(lt *text.Shaper) {
 	it := textIterator{viewport: image.Rectangle{Max: image.Point{X: math.MaxInt, Y: math.MaxInt}}}
 	if lt != nil {
 		lt.Layout(e.params, r)
-		for glyph, ok := it.processGlyph(lt.NextGlyph()); ok; glyph, ok = it.processGlyph(lt.NextGlyph()) {
-			e.index.Glyph(glyph)
+		for {
+			g, ok := lt.NextGlyph()
+			if !it.processGlyph(g, ok) {
+				break
+			}
+			e.index.Glyph(g)
 		}
 	} else {
 		// Make a fake glyph for every rune in the reader.
 		b := bufio.NewReader(r)
 		for _, _, err := b.ReadRune(); err != io.EOF; _, _, err = b.ReadRune() {
-			g, _ := it.processGlyph(text.Glyph{Runes: 1, Flags: text.FlagClusterBreak}, true)
+			g := text.Glyph{Runes: 1, Flags: text.FlagClusterBreak}
+			_ = it.processGlyph(g, true)
 			e.index.Glyph(g)
 		}
 	}

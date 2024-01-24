@@ -18,6 +18,10 @@
 		</p>
 	</description>
 	<launchable type="desktop-id">co.honnef.Gotraceui.desktop</launchable>
+	<provides>
+		<mediatype>application/x-go-execution-trace</mediatype>
+		<binary>gotraceui</binary>
+	</provides>
 	<screenshots>
 		<screenshot type="default">
 			<image>https://user-images.githubusercontent.com/39825/228830850-d0f324dd-10bc-47e9-99d4-0936cbb79492.png</image>
@@ -29,6 +33,38 @@
 
 	<content_rating type="oars-1.1" />
 	<releases>
+		<release version="0.4.0" date="2024-01-09" type="stable">
+			<description>
+				<ul>
+					<li>Require Go 1.21 for building Gotraceui</li>
+					<li>All tables now have resizable and sortable columns</li>
+					<li>Added flame graphs</li>
+					<li>Links to timelines and spans now default to opening information</li>
+					<li>Links that open things and links that navigate use different colors (red and blue, respectively)</li>
+					<li>Clicking on spans in GC and STW timelines no longer crashes</li>
+					<li>Hovering table rows highlights them</li>
+					<li>When hovering timestamp links, their targets will be indicated in the timelines view</li>
+					<li>Spans have a new context menu item, to open their span information</li>
+					<li>Switch to a tabbed user interface instead of using multiple windows</li>
+					<li>Added a Goroutines tab that lists all goroutines in the trace</li>
+					<li>Panels can be converted into tabs</li>
+					<li>Added context menu to goroutine labels in timelines view</li>
+					<li>No longer create empty GC or STW timelines</li>
+					<li>Merged spans now display a detailed representation of the contained spans</li>
+					<li>Fixed a rare crash at startup</li>
+					<li>Fixed a rare crash for some traces</li>
+					<li>Handle DPI changes while Gotraceui is running</li>
+					<li>Display user-friendly strings instead of "unknown" for unknown timestamps</li>
+					<li>Hovered and highlighted spans are now indicated with a gradient instead of the border color</li>
+					<li>Span borders more accurately show if the span's beginning or end are outside the visible area</li>
+					<li>Merged spans no longer stop at the screen boundaries</li>
+					<li>Lowered peak memory usage</li>
+					<li>"active" spans in goroutine timelines now have a label</li>
+					<li>Improved rendering of graphs with many points</li>
+				</ul>
+			</description>
+			<url type="details">https://github.com/dominikh/gotraceui/releases/tag/v0.4.0</url>
+		</release>
 		<release version="0.3.0" date="2023-08-07" type="stable">
 			<description>
 				<ul>
@@ -58,7 +94,7 @@
 					<li>Expensive computations, such as creating goroutine statistics, now run in the background and no longer prevent the UI from updating.</li>
 				</ul>
 			</description>
-			<url type="details">https://github.com/dominikh/gotraceui/releases/tag/v0.1.0</url>
+			<url type="details">https://github.com/dominikh/gotraceui/releases/tag/v0.3.0</url>
 		</release>
 		<release version="0.1.0" date="2023-03-30" type="stable">
 			<description>
